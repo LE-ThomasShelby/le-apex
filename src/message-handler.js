@@ -37,7 +37,8 @@ async function sendLongReply(message, text) {
 
 async function handleQuestionMessage(message) {
   if (message.author.bot || !message.guild) return;
-  if (!message.content.toLowerCase().startsWith(PREFIX)) return;
+  const normalized = message.content.toLowerCase();
+  if (normalized !== PREFIX && !normalized.startsWith(PREFIX + " ")) return;
 
   const guildLock = process.env.GUILD_ID;
   if (guildLock && message.guild.id !== guildLock) return;
@@ -49,7 +50,7 @@ async function handleQuestionMessage(message) {
     return message.reply({
       embeds: [makeEmbed(
         "How to use LEGION AI",
-        "**Ask anything:** `.q What is artificial intelligence?\n.q Explain this message\n.q Help me write an announcement`\n\n**Clear your chat:** `.q clear`\nYour conversation is private to your Discord account's history and is not shared with other members."
+        "**Ask anything:** `.q What is artificial intelligence?\n.q Explain this message\n.q Help me write an announcement`\n\n**Clear your chat:** `.q clear`\nYour conversation history is used to provide follow-up context and is not displayed to other members."
       )],
       allowedMentions: { repliedUser: false },
     });
