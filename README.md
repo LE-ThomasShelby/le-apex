@@ -1,56 +1,56 @@
-# LEGION AI
+# LE-APEX
 
-**Intelligence. Without Limits.**
+Multi-server Discord Tournament Manager.
 
-A Discord-first AI assistant for the LEGION community. Members interact using the simple `.q` prefix.
+One bot can serve many Discord communities. Each server has its own isolated tournament records, registrations, brackets and match results.
 
-## Current features
+## Commands
 
-- `.q <question>` — ask LEGION AI
-- `.q help` — show usage
-- `.q clear` — clear your saved conversation context
-- `.q model` — show AI provider status
-- Per-member, per-server conversation history
-- Configurable OpenAI-compatible inference provider
-- Discord message-length splitting
-- Per-member cooldown
-- Optional single-server restriction using `GUILD_ID`
+- /tournament create - create a tournament (Manage Server)
+- /tournament list - list tournaments in the current server
+- /tournament register - join a tournament
+- /tournament start - close registration and generate a randomized single-elimination bracket (Manage Server)
+- /tournament bracket - view a tournament bracket
+- /tournament result - record a match winner (Manage Server)
+- /tournament cancel - cancel a tournament (Manage Server)
+
+## Multi-server isolation
+
+Every tournament stores its originating Discord server ID. All tournament reads and writes are scoped to the current server, so an ID from another server cannot be used to view or manage its tournaments.
 
 ## Requirements
 
 - Node.js 20+
-- A Discord application and bot
-- Message Content Intent enabled in the Discord Developer Portal
-- An AI inference endpoint compatible with OpenAI chat completions
+- Discord application and bot token
+- Bot invited with bot and applications.commands scopes
+- Send Messages and Embed Links permissions
+- Persistent Node.js process and durable disk storage for SQLite
 
-## Local setup
+## Setup
 
-1. Install Node.js 20 or newer.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env`.
-4. Set `DISCORD_TOKEN`.
-5. Configure `AI_BASE_URL` and `AI_MODEL` after selecting a verified inference provider.
-6. Run `npm start`.
+1. Install dependencies with npm install.
+2. Copy .env.example to .env.
+3. Set DISCORD_TOKEN privately.
+4. Optionally set COMMAND_GUILD_ID for instant command registration in a test server. Leave blank for global registration.
+5. Run npm start.
 
-## Discord configuration
+LE-APEX uses Discord slash-command interactions and does not need the privileged Message Content Intent.
 
-In the Discord Developer Portal, open the bot's settings and enable **Message Content Intent**. Invite the bot with permission to view channels, read message history, and send messages.
+## Hosting
 
-## AI provider and cost
-
-The provider adapter accepts an OpenAI-compatible `/chat/completions` endpoint. The bot code itself does not require a paid AI subscription, but a working inference service is required to generate answers. A free, no-card provider has not yet been verified or configured. Do not enter payment details to complete this setup.
-
-## Hosting and persistence
-
-This initial version uses a Node.js Discord Gateway connection and SQLite. The host must support a persistent Node.js process and durable disk storage, or the database must be migrated to a managed persistent database. Free hosting availability and limits vary; do not assume an always-on free service.
+SQLite requires durable storage. Do not use a host that deletes local files when the service restarts. Free hosting limits and uptime can change; no host is guaranteed to be free or online 24/7.
 
 ## Security
 
-- Never commit `.env` or bot tokens.
-- Restrict the bot to the intended LEGION server using `GUILD_ID` if desired.
-- Keep staff-only data out of member-accessible AI context.
-- Add provider-side privacy and retention review before public launch.
+- Never commit .env or publish the bot token.
+- Do not send the token in chat or screenshots.
+- Keep Manage Server checks enabled for tournament administration.
+- Tournament data is isolated by Discord server ID.
 
-## Status
+## Roadmap
 
-Initial source scaffold created. Discord bot logic and conversation storage are implemented. AI provider selection, Discord credentials, deployment, and live testing remain outstanding.
+- Automated tests for bracket generation and result progression
+- Double elimination and league formats
+- Team registration and team tournaments
+- Match deadlines, reminders and dispute handling
+- Optional public web dashboard
