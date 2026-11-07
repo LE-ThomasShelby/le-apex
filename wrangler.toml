@@ -1,0 +1,9 @@
+name = "le-apex"
+main = "worker/index.js"
+compatibility_date = "2026-11-07"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "le-apex"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
