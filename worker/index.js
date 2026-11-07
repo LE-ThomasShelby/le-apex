@@ -64,11 +64,10 @@ async function runCommand(interaction, env) {
     const userId = user.id;
     const existing = await db.prepare("SELECT 1 AS found FROM participants WHERE tournament_id=? AND user_id=?").bind(id, userId).first();
     if (existing) return reply("You're already registered.", true);
-    const count = await db.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id=?").bind(id).first();
-    if (count.count >= t.max_players) return reply("This tournament is full.", true);
     const displayName = interaction.member?.nick || user.global_name || user.username;
     try {
-      await db.prepare("INSERT INTO participants (tournament_id,user_id,display_name) VALUES (?,?,?)").bind(id, userId, displayName).run();
+      const inserted = await db.prepare("INSERT INTO participants (tournament_id,user_id,display_name) SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM participants WHERE tournament_id=?) < (SELECT max_players FROM tournaments WHERE id=? AND guild_id=? AND status='registration')").bind(id, userId, displayName, id, id, guildId).run();
+      if (!inserted.meta.changes) return reply("This tournament is full or registration has just closed.", true);
       return embedReply("Registration confirmed", `You're registered for **${t.name}** (#${id}). Good luck!`, 0x16A34A, true);
     } catch { return reply("Registration could not be completed. You may already be registered.", true); }
   }
@@ -146,7 +145,7 @@ async function runCommand(interaction, env) {
     const statements = [db.prepare("UPDATE matches SET winner_id=?,score=?,status='completed' WHERE id=? AND status='pending'").bind(winner, value(opts, "score") || null, match.id)];
     if (next) {
       const column = matchNo % 2 === 1 ? "player1_id" : "player2_id";
-      statements.push(db.prepare(`UPDATE matches SET ${column}=? WHERE id=?`).bind(winner, next.id));
+      statements.push(db.prepare(`UPDATE matches SET ${column}=(SELECT winner_id FROM matches WHERE id=? AND status='completed') WHERE id=? AND ${column} IS NULL`).bind(match.id, next.id));
     } else {
       statements.push(db.prepare("UPDATE tournaments SET status='completed',completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(id));
     }
