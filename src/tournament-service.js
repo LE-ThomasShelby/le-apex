@@ -45,7 +45,11 @@ function startTournament(guildId, id) {
     [players[i], players[j]] = [players[j], players[i]];
   }
   const size = 2 ** Math.ceil(Math.log2(players.length));
-  const slots = [...players, ...Array(size - players.length).fill(null)];
+  const byeCount = size - players.length;
+  const slots = [];
+  // Spread byes across the draw so no empty-vs-empty opening matches are created.
+  for (let i = 0; i < byeCount; i++) slots.push(players[i], null);
+  for (let i = byeCount; i < players.length; i += 2) slots.push(players[i], players[i + 1] || null);
   const totalRounds = Math.log2(size);
 
   const build = db.transaction(() => {
