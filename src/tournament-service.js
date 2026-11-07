@@ -50,33 +50,31 @@ function startTournament(guildId, id) {
 
   const build = db.transaction(() => {
     const insert = db.prepare("INSERT INTO matches (tournament_id, round_number, match_number, player1_id, player2_id, winner_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    let currentWinners = [];
-    for (let i = 0; i < size / 2; i++) {
-      const a = slots[i * 2] || null;
-      const b = slots[i * 2 + 1] || null;
-      const winner = a && !b ? a : (!a && b ? b : null);
-      insert.run(id, 1, i + 1, a, b, winner, winner ? "completed" : "pending");
-      currentWinners.push(winner);
-    }
-    for (let round = 2; round <= totalRounds; round++) {
-      const nextWinners = [];
-      for (let i = 0; i < currentWinners.length / 2; i++) {
-        const a = currentWinners[i * 2] || null;
-        const b = currentWinners[i * 2 + 1] || null;
-        const winner = a && !b ? a : (!a && b ? b : null);
-        insert.run(id, round, i + 1, a, b, winner, winner ? "completed" : "pending");
-        nextWinners.push(winner);
+    const updateSlot = db.prepare("UPDATE matches SET player1_id = ? WHERE tournament_id = ? AND round_number = ? AND match_number = ?");
+    const updateSlot2 = db.prepare("UPDATE matches SET player2_id = ? WHERE tournament_id = ? AND round_number = ? AND match_number = ?");
+    for (let round = 1; round <= totalRounds; round++) {
+      const count = size / (2 ** round);
+      for (let matchNo = 1; matchNo <= count; matchNo++) {
+        const p1 = round === 1 ? slots[(matchNo - 1) * 2] || null : null;
+        const p2 = round === 1 ? slots[(matchNo - 1) * 2 + 1] || null : null;
+        const byeWinner = round === 1 && p1 && !p2 ? p1 : null;
+        insert.run(id, round, matchNo, p1, p2, byeWinner, byeWinner ? "completed" : "pending");
       }
-      currentWinners = nextWinners;
+    }
+    // A first-round bye advances its player, but the next match remains pending
+    // until the other feeder match has produced its winner.
+    const firstRound = db.prepare("SELECT * FROM matches WHERE tournament_id = ? AND round_number = 1").all(id);
+    for (const match of firstRound) {
+      if (match.status !== "completed" || !match.winner_id || totalRounds < 2) continue;
+      const nextNo = Math.ceil(match.match_number / 2);
+      if (match.match_number % 2 === 1) updateSlot.run(match.winner_id, id, 2, nextNo);
+      else updateSlot2.run(match.winner_id, id, 2, nextNo);
     }
     db.prepare("UPDATE tournaments SET status = 'ongoing', started_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
-    const champion = currentWinners[0];
-    if (champion) db.prepare("UPDATE tournaments SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
   });
   build();
   return { ok: true, players: players.length, rounds: totalRounds };
 }
-
 function reportResult(guildId, id, round, matchNumber, winnerId, score) {
   const tournament = getTournament(guildId, id);
   if (!tournament) return { ok: false, reason: "not_found" };
