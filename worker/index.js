@@ -197,6 +197,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") return new Response("LE-APEX is running. Discord interactions endpoint is active.");
+    if (request.method === "GET" && url.pathname === "/setup") {
+      return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>LE-APEX setup</title><style>body{font:16px system-ui;max-width:560px;margin:10vh auto;padding:24px;background:#111827;color:#f9fafb}input,button{box-sizing:border-box;width:100%;padding:13px;margin:8px 0;border-radius:8px;border:1px solid #475569}button{background:#7c3aed;color:white;font-weight:700;cursor:pointer}small{color:#cbd5e1}</style></head><body><h1>LE-APEX command setup</h1><p>Enter the SETUP_SECRET you saved in Cloudflare Worker settings. It is sent only to this Worker.</p><form id="f"><input id="secret" type="password" autocomplete="off" placeholder="SETUP_SECRET" required><button>Register Discord commands</button></form><pre id="out"></pre><script>document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const out=document.getElementById('out');out.textContent='Registering…';try{const r=await fetch('/setup',{method:'POST',headers:{Authorization:'Bearer '+document.getElementById('secret').value}});const d=await r.json();out.textContent=r.ok?'Success: '+d.message:'Error: '+(d.error||r.statusText)}catch(e){out.textContent='Request failed: '+e.message}})</script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     if (request.method === "POST" && url.pathname === "/setup") {
       if (!env.SETUP_SECRET || request.headers.get("Authorization") !== `Bearer ${env.SETUP_SECRET}`) return new Response("Unauthorized", { status: 401 });
       try { await registerCommands(env); return json({ ok: true, message: "LE-APEX slash commands registered globally." }); }
