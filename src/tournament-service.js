@@ -21,6 +21,8 @@ function registerPlayer(guildId, id, userId, displayName) {
   const tournament = getTournament(guildId, id);
   if (!tournament) return { ok: false, reason: "not_found" };
   if (tournament.status !== "registration") return { ok: false, reason: "closed" };
+  const existing = db.prepare("SELECT 1 FROM participants WHERE tournament_id = ? AND user_id = ?").get(id, userId);
+  if (existing) return { ok: false, reason: "already_registered" };
   const count = db.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id = ?").get(id).count;
   if (count >= tournament.max_players) return { ok: false, reason: "full" };
   try {
