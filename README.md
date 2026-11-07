@@ -36,7 +36,7 @@ The current engine supports randomized single-elimination brackets, byes, result
    - `SETUP_SECRET` — a long random secret you create; store it as a Worker secret
 7. Deploy the Worker. Its endpoint is `https://<your-worker>.workers.dev/interactions`.
 8. In Discord Developer Portal → General Information, set **Interactions Endpoint URL** to that endpoint. Discord will validate it.
-9. After Discord accepts the endpoint, call `POST https://<your-worker>.workers.dev/setup` with header `Authorization: Bearer <SETUP_SECRET>` once to register slash commands globally.
+9. After Discord accepts the endpoint, open `https://<your-worker>.workers.dev/setup` in your browser, enter the `SETUP_SECRET`, and press **Register Discord commands** once.
 10. Invite the bot with `bot` and `applications.commands` scopes. Give it View Channels, Send Messages and Embed Links permissions where tournaments will be used.
 
 ## Free-tier note
