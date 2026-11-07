@@ -2,51 +2,48 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Database = require("better-sqlite3");
 
-const databasePath = process.env.DATABASE_PATH || "./data/legion-ai.sqlite";
+const databasePath = process.env.DATABASE_PATH || "./data/le-apex.sqlite";
 fs.mkdirSync(path.dirname(path.resolve(databasePath)), { recursive: true });
 const db = new Database(databasePath);
 
-db.pragma("journal_mode = WAL");
-db.exec(`
-  CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    guild_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE INDEX IF NOT EXISTS idx_conversations_user_guild
-    ON conversations(user_id, guild_id, id);
-`);
-
-const selectHistory = db.prepare(`
-  SELECT role, content FROM conversations
-  WHERE user_id = ? AND guild_id = ?
-  ORDER BY id DESC LIMIT ?
-`);
-const insertMessage = db.prepare(
-  "INSERT INTO conversations (user_id, guild_id, role, content) VALUES (?, ?, ?, ?)"
-);
-const deleteHistory = db.prepare(
-  "DELETE FROM conversations WHERE user_id = ? AND guild_id = ?"
-);
-
-function getHistory(userId, guildId) {
-  const max = Math.max(2, Number(process.env.MAX_HISTORY_MESSAGES || 16));
-  return selectHistory.all(userId, guildId, max).reverse();
+function initializeDatabase() {
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      game TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'registration',
+      max_players INTEGER NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      started_at TEXT,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tournaments_guild ON tournaments(guild_id, status, id);
+    CREATE TABLE IF NOT EXISTS participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tournament_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      round_number INTEGER NOT NULL,
+      match_number INTEGER NOT NULL,
+      player1_id TEXT,
+      player2_id TEXT,
+      winner_id TEXT,
+      score TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      UNIQUE(tournament_id, round_number, match_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(tournament_id, round_number, match_number);
+  `);
 }
-
-function addExchange(userId, guildId, question, answer) {
-  const transaction = db.transaction(() => {
-    insertMessage.run(userId, guildId, "user", question);
-    insertMessage.run(userId, guildId, "assistant", answer);
-  });
-  transaction();
-}
-
-function clearHistory(userId, guildId) {
-  deleteHistory.run(userId, guildId);
-}
-
-module.exports = { getHistory, addExchange, clearHistory };
+module.exports = { db, initializeDatabase };
