@@ -1,16 +1,11 @@
 {
-  "name": "legion-ai",
-  "version": "1.0.0",
+  "name": "le-apex",
+  "version": "2.0.0",
   "private": true,
-  "description": "LEGION AI - a Discord-first AI assistant powered by the .q prefix",
+  "description": "LE-APEX multi-server Discord tournament manager",
   "main": "src/index.js",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
+  "scripts": {"start": "node src/index.js", "dev": "node --watch src/index.js"},
+  "engines": {"node": ">=20"},
   "dependencies": {
     "better-sqlite3": "^12.4.1",
     "discord.js": "^14.22.1",
