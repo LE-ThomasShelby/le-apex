@@ -1,56 +1,61 @@
 # LE-APEX
 
-Multi-server Discord Tournament Manager.
+**Multi-server Discord Tournament Manager** — one bot, isolated tournament data for every Discord server.
 
-One bot can serve many Discord communities. Each server has its own isolated tournament records, registrations, brackets and match results.
+## Current architecture
+
+- Cloudflare Worker receives Discord HTTP interactions (no always-on Gateway process).
+- Cloudflare D1 stores tournaments, participants and matches.
+- Discord Ed25519 signatures are verified before any interaction is accepted.
+- Server data is isolated by Discord guild ID.
+- No Discord privileged intents are required.
 
 ## Commands
 
-- /tournament create - create a tournament (Manage Server)
-- /tournament list - list tournaments in the current server
-- /tournament register - join a tournament
-- /tournament start - close registration and generate a randomized single-elimination bracket (Manage Server)
-- /tournament bracket - view a tournament bracket
-- /tournament result - record a match winner (Manage Server)
-- /tournament cancel - cancel a tournament (Manage Server)
+- `/tournament create` — Manage Server permission
+- `/tournament list`
+- `/tournament register id:<id>`
+- `/tournament start id:<id>` — Manage Server permission
+- `/tournament bracket id:<id>`
+- `/tournament result id:<id> round:<round> match:<match> winner:<user>` — Manage Server permission
+- `/tournament cancel id:<id>` — Manage Server permission
 
-## Multi-server isolation
+The current engine supports randomized single-elimination brackets, byes, results and automatic advancement.
 
-Every tournament stores its originating Discord server ID. All tournament reads and writes are scoped to the current server, so an ID from another server cannot be used to view or manage its tournaments.
+## Deploy through the Cloudflare dashboard
 
-## Requirements
+1. Create a Cloudflare account on the Free plan. Do not add a payment method if you do not want to.
+2. Create a D1 database named `le-apex`.
+3. In D1, run the SQL in `migrations/0001_init.sql`.
+4. Create a Worker named `le-apex` and paste the contents of `worker/index.js` into its editor, or connect this GitHub repository and set the root entry point to `worker/index.js`.
+5. Add a D1 binding named `DB` pointing to the database.
+6. Add these Worker secrets/variables:
+   - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → Public Key
+   - `DISCORD_APPLICATION_ID` — Application ID
+   - `DISCORD_TOKEN` — bot token (secret; never share it in chat)
+   - `SETUP_SECRET` — a long random secret you create; store it as a Worker secret
+7. Deploy the Worker. Its endpoint is `https://<your-worker>.workers.dev/interactions`.
+8. In Discord Developer Portal → General Information, set **Interactions Endpoint URL** to that endpoint. Discord will validate it.
+9. After Discord accepts the endpoint, call `POST https://<your-worker>.workers.dev/setup` with header `Authorization: Bearer <SETUP_SECRET>` once to register slash commands globally.
+10. Invite the bot with `bot` and `applications.commands` scopes. Give it View Channels, Send Messages and Embed Links permissions where tournaments will be used.
 
-- Node.js 20+
-- Discord application and bot token
-- Bot invited with bot and applications.commands scopes
-- Send Messages and Embed Links permissions
-- Persistent Node.js process and durable disk storage for SQLite
+## Free-tier note
 
-## Setup
+Cloudflare Workers and D1 offer free tiers with usage limits. This is not a promise of unlimited usage or guaranteed 24/7 service. The Worker uses D1 instead of local SQLite, so it does not need a persistent server process or local disk.
 
-1. Install dependencies with npm install.
-2. Copy .env.example to .env.
-3. Set DISCORD_TOKEN privately.
-4. Optionally set COMMAND_GUILD_ID for instant command registration in a test server. Leave blank for global registration.
-5. Run npm start.
+## Local checks
 
-LE-APEX uses Discord slash-command interactions and does not need the privileged Message Content Intent.
-
-## Hosting
-
-SQLite requires durable storage. Do not use a host that deletes local files when the service restarts. Free hosting limits and uptime can change; no host is guaranteed to be free or online 24/7.
+- `npm test` runs the existing tournament-engine regression tests.
+- `npm run check:worker` checks Worker JavaScript syntax.
 
 ## Security
 
-- Never commit .env or publish the bot token.
-- Do not send the token in chat or screenshots.
-- Keep Manage Server checks enabled for tournament administration.
-- Tournament data is isolated by Discord server ID.
+- Never commit secrets or share the bot token.
+- Discord request signatures are verified before handling commands.
+- Setup route requires the private `SETUP_SECRET`.
+- Manager-only actions check Manage Server or Administrator permissions.
+- Tournament reads and writes are scoped to the current server.
 
 ## Roadmap
 
-- Automated tests for bracket generation and result progression
-- Double elimination and league formats
-- Team registration and team tournaments
-- Match deadlines, reminders and dispute handling
-- Optional public web dashboard
+Double elimination, league tables, team registration, match confirmation/disputes, deadlines and reminders.
