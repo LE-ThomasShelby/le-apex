@@ -83,18 +83,18 @@ export class DiscordGateway extends DurableObject {
       const base = await this.ctx.storage.get("resume_gateway_url") || gatewayData.url;
       const ws = new WebSocket(`${base}?v=10&encoding=json`);
       this.ws = ws;
-      ws.addEventListener("message", event => { void this.onGatewayMessage(ws, event.data); });
+      ws.addEventListener("message", event => { this.ctx.waitUntil(this.onGatewayMessage(ws, event.data)); });
       ws.addEventListener("close", event => {
         if (this.ws !== ws) return;
         this.ws = null;
         this.clearHeartbeat();
         if (!this.stopped) {
-          void this.ctx.storage.put("gateway_status", `disconnected_${event.code}`);
+          this.ctx.waitUntil(this.ctx.storage.put("gateway_status", `disconnected_${event.code}`));
           this.scheduleReconnect(5000);
         }
       });
       ws.addEventListener("error", () => {
-        if (this.ws === ws) void this.ctx.storage.put("gateway_status", "connection_error");
+        if (this.ws === ws) this.ctx.waitUntil(this.ctx.storage.put("gateway_status", "connection_error"));
       });
     } catch (error) {
       console.error("LE-APEX Gateway connection error", error);
@@ -107,7 +107,7 @@ export class DiscordGateway extends DurableObject {
     if (this.stopped || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      void this.connect();
+      this.ctx.waitUntil(this.connect());
     }, delay);
   }
 
