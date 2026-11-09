@@ -210,10 +210,10 @@ export class DiscordGateway extends DurableObject {
       } else if (command === ".help") {
         await this.sendMessage(message.channel_id,
           "**LE-APEX — COMMAND GUIDE**\n" +
-          "".ping — Check bot response/status\n" +
-          "".help — Show this guide\n" +
-          "".reg — Register for the open tournament in this channel\n" +
-          "".unreg — Withdraw before the tournament starts\n" +
+          ".ping — Check bot response/status\n" +
+          ".help — Show this guide\n" +
+          ".reg — Register for the open tournament in this channel\n" +
+          ".unreg — Withdraw before the tournament starts\n" +
           ".fixture — View your own upcoming and completed matchups\\n" +
           ".team create/join/leave/list — Build and manage a team in team tournaments\\n" +
           "Use /tournament to create, manage, start and view tournaments."
