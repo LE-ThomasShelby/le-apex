@@ -1,0 +1,9 @@
+-- Tournament announcement and registration channel configuration.
+ALTER TABLE tournaments ADD COLUMN announcement_channel_id TEXT;
+ALTER TABLE tournaments ADD COLUMN registration_channel_id TEXT;
+ALTER TABLE tournaments ADD COLUMN prize TEXT;
+ALTER TABLE tournaments ADD COLUMN prize_image_url TEXT;
+ALTER TABLE tournaments ADD COLUMN description TEXT;
+ALTER TABLE tournaments ADD COLUMN format TEXT;
+ALTER TABLE tournaments ADD COLUMN announcement_message_id TEXT;
+ALTER TABLE tournaments ADD COLUMN registration_message_id TEXT;
