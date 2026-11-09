@@ -32,6 +32,25 @@ function isManager(interaction) {
 async function tournament(db, guildId, id) {
   return db.prepare("SELECT * FROM tournaments WHERE guild_id = ? AND id = ?").bind(guildId, id).first();
 }
+async function discordApi(env, path, method = "GET", body) {
+  const response = await fetch(`${API}${path}`, { method, headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (response.status === 204) return null;
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch {}
+  if (!response.ok) throw new Error(`Discord API ${method} ${path} failed: ${response.status} ${data.message || text}`);
+  return data;
+}
+function registrationEmbed(t, count) {
+  const full = count >= t.max_players;
+  const open = t.status === "registration" && !full;
+  return { title: `📋 OFFICIAL REGISTRATION — ${t.name}`, description: open ? `Registration is open. Type **/tournament register id:${t.id}** in this server to secure your place.\n\nOne account = one entry. Your place is confirmed only after LE-APEX replies.` : full ? "All tournament slots have been filled. Registration is closed." : "Registration is closed. Follow the announcement channel for tournament updates.", color: open ? 0xC9A34D : 0x64748B, fields: [{ name: "Players", value: `**${count} / ${t.max_players}**`, inline: true }, { name: "Status", value: full ? "FULL" : open ? "OPEN" : "CLOSED", inline: true }, { name: "Tournament ID", value: `#${t.id}`, inline: true }], footer: { text: "LE-APEX • Official Registration Desk" } };
+}
+async function updateRegistrationPanel(env, t) {
+  if (!t.registration_channel_id || !t.registration_message_id) return;
+  const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id=?").bind(t.id).first();
+  await discordApi(env, `/channels/${t.registration_channel_id}/messages/${t.registration_message_id}`, "PATCH", { embeds: [registrationEmbed(t, Number(row?.count || 0))] });
+}
 async function runCommand(interaction, env) {
   const db = env.DB;
   const guildId = interaction.guild_id;
@@ -47,9 +66,31 @@ async function runCommand(interaction, env) {
     const name = String(value(opts, "name") || "").trim();
     const game = String(value(opts, "game") || "").trim();
     const maxPlayers = Number(value(opts, "players"));
-    if (!name || !game || !Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 128) return reply("Invalid tournament details.", true);
-    const result = await db.prepare("INSERT INTO tournaments (guild_id, name, game, max_players, created_by) VALUES (?, ?, ?, ?, ?)").bind(guildId, name, game, maxPlayers, interaction.member.user.id).run();
-    return embedReply("Tournament created", `**${name}**\nGame: ${game}\nPlayer limit: ${maxPlayers}\nTournament ID: **#${result.meta.last_row_id}**\n\nPlayers can join using /tournament register.`, 0x16A34A);
+    const announcementChannelId = value(opts, "announcement_channel");
+    const registrationChannelId = value(opts, "registration_channel");
+    const prize = String(value(opts, "prize") || "To be announced").trim();
+    const prizeImage = String(value(opts, "prize_image") || "").trim();
+    const description = String(value(opts, "details") || "Registration is now open. Join before all places are filled.").trim();
+    const format = String(value(opts, "format") || "Single Elimination").trim();
+    if (!name || !game || !announcementChannelId || !registrationChannelId || !Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 128) return reply("Please provide the tournament name, game, player limit, announcement channel and registration channel.", true);
+    if (prizeImage) { try { const imageUrl = new URL(prizeImage); if (imageUrl.protocol !== "https:") throw new Error(); } catch { return reply("Prize image must be a valid HTTPS image URL.", true); } }
+    const result = await db.prepare("INSERT INTO tournaments (guild_id,name,game,max_players,created_by,announcement_channel_id,registration_channel_id,prize,prize_image_url,description,format) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(guildId, name, game, maxPlayers, interaction.member.user.id, announcementChannelId, registrationChannelId, prize.slice(0, 200), prizeImage || null, description.slice(0, 1000), format.slice(0, 80)).run();
+    const tournamentId = Number(result.meta.last_row_id);
+    const t = await tournament(db, guildId, tournamentId);
+    let pinned = false;
+    try {
+      const registrationMessage = await discordApi(env, `/channels/${registrationChannelId}/messages`, "POST", { embeds: [registrationEmbed(t, 0)], allowed_mentions: { parse: [] } });
+      await db.prepare("UPDATE tournaments SET registration_message_id=? WHERE id=? AND guild_id=?").bind(registrationMessage.id, tournamentId, guildId).run();
+      t.registration_message_id = registrationMessage.id;
+      try { await discordApi(env, `/channels/${registrationChannelId}/pins/${registrationMessage.id}`, "PUT"); pinned = true; } catch (pinError) { console.warn("LE-APEX could not pin registration panel; grant Manage Messages permission to the bot.", pinError); }
+      const announcementEmbed = { title: `🏆 ${name}`, description: description.slice(0, 4000), color: 0xC9A34D, fields: [{ name: "GAME", value: game, inline: true }, { name: "FORMAT", value: format, inline: true }, { name: "PLAYER SLOTS", value: `0 / ${maxPlayers}`, inline: true }, { name: "PRIZE", value: prize, inline: false }, { name: "REGISTRATION", value: "OPEN NOW", inline: true }], footer: { text: `LE-APEX • Tournament #${tournamentId}` }, ...(prizeImage ? { image: { url: prizeImage } } : {}) };
+      const announcementMessage = await discordApi(env, `/channels/${announcementChannelId}/messages`, "POST", { content: "🏆 **NEW TOURNAMENT — REGISTRATION IS OPEN**", embeds: [announcementEmbed], components: [{ type: 1, components: [{ type: 2, style: 5, label: "REGISTER", url: `https://discord.com/channels/${guildId}/${registrationChannelId}` }] }], allowed_mentions: { parse: [] } });
+      await db.prepare("UPDATE tournaments SET announcement_message_id=? WHERE id=? AND guild_id=?").bind(announcementMessage.id, tournamentId, guildId).run();
+    } catch (error) {
+      console.error("LE-APEX tournament announcement failed", error);
+      return embedReply("Tournament created — announcement needs attention", `**${name}** was saved as tournament **#${tournamentId}**, but LE-APEX could not finish publishing both messages. Check that the bot can view and send messages in both selected channels. Error: ${String(error.message || error).slice(0, 500)}`, 0xD97706, true);
+    }
+    return embedReply("Tournament published", `**${name}** (#${tournamentId}) is live.\n\n• Announcement posted in <#${announcementChannelId}>\n• Registration desk posted in <#${registrationChannelId}>\n• REGISTER button links directly to the registration channel\n• Registration desk ${pinned ? "pinned successfully" : "posted; grant Manage Messages to the bot to allow automatic pinning"}\n\nPlayers can register using **/tournament register id:${tournamentId}** for now.`, 0x16A34A);
   }
   if (action === "list") {
     const { results = [] } = await db.prepare("SELECT t.*, (SELECT COUNT(*) FROM participants p WHERE p.tournament_id=t.id) AS player_count FROM tournaments t WHERE t.guild_id=? ORDER BY t.id DESC LIMIT 15").bind(guildId).all();
@@ -166,10 +207,16 @@ async function registerCommands(env) {
   const commands = [{
     name: "tournament", description: "Create and manage tournaments in this server", dm_permission: false,
     options: [
-      { type: 1, name: "create", description: "Create a tournament", options: [
+      { type: 1, name: "create", description: "Create and publish a tournament announcement", options: [
         { type: 3, name: "name", description: "Tournament name", required: true, max_length: 80 },
         { type: 3, name: "game", description: "Game or competition", required: true, max_length: 60 },
-        { type: 4, name: "players", description: "Maximum players, 2 to 128", required: true, min_value: 2, max_value: 128 }
+        { type: 4, name: "players", description: "Maximum players, 2 to 128", required: true, min_value: 2, max_value: 128 },
+        { type: 7, name: "announcement_channel", description: "Channel for the tournament announcement", required: true, channel_types: [0] },
+        { type: 7, name: "registration_channel", description: "Channel for the registration desk", required: true, channel_types: [0] },
+        { type: 3, name: "prize", description: "Prize details", required: false, max_length: 200 },
+        { type: 3, name: "prize_image", description: "HTTPS URL of the prize image", required: false, max_length: 400 },
+        { type: 3, name: "details", description: "Tournament description and rules summary", required: false, max_length: 1000 },
+        { type: 3, name: "format", description: "Tournament format", required: false, max_length: 80 }
       ]},
       { type: 1, name: "list", description: "List this server's tournaments" },
       { type: 1, name: "register", description: "Register for a tournament", options: [{ type: 4, name: "id", description: "Tournament ID", required: true, min_value: 1 }] },
