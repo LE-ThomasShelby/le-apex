@@ -7,3 +7,11 @@ binding = "DB"
 database_name = "le-apex"
 database_id = "d6b43704-4a09-499c-9735-acbb4426945f"
 migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "GATEWAY"
+class_name = "DiscordGateway"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DiscordGateway"]
