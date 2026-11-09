@@ -52,6 +52,8 @@ export class DiscordGateway extends DurableObject {
     this.reconnectTimer = null;
     this.sequence = null;
     this.awaitingAck = false;
+    this.heartbeatSentAt = null;
+    this.lastHeartbeatRtt = null;
     this.stopped = false;
   }
 
@@ -114,7 +116,8 @@ export class DiscordGateway extends DurableObject {
       pingCommands: Number(await this.ctx.storage.get("diag_ping_commands") || 0),
       sendFailures: Number(await this.ctx.storage.get("diag_send_failures") || 0),
       lastMessageAt: await this.ctx.storage.get("diag_last_message_at") || null,
-      lastMessageHadContent: await this.ctx.storage.get("diag_last_message_had_content") || false
+      lastMessageHadContent: await this.ctx.storage.get("diag_last_message_had_content") || false,
+      gatewayLatencyMs: this.lastHeartbeatRtt
     };
   }
 
@@ -176,6 +179,7 @@ export class DiscordGateway extends DurableObject {
         return;
       }
       this.awaitingAck = true;
+      this.heartbeatSentAt = Date.now();
       this.sendGateway({ op: 1, d: this.sequence });
       this.heartbeatTimer = setTimeout(tick, interval);
     };
@@ -211,6 +215,10 @@ export class DiscordGateway extends DurableObject {
       return;
     }
     if (packet.op === 11) {
+      if (this.heartbeatSentAt !== null) {
+        this.lastHeartbeatRtt = Math.max(0, Date.now() - this.heartbeatSentAt);
+        this.heartbeatSentAt = null;
+      }
       this.awaitingAck = false;
       return;
     }
@@ -260,7 +268,9 @@ export class DiscordGateway extends DurableObject {
       }
       if (command === "-ping") {
         await this.ctx.storage.put("diag_ping_commands", Number(await this.ctx.storage.get("diag_ping_commands") || 0) + 1);
-        await this.sendMessage(message.channel_id, "🏓 Pong! LE-APEX is online.");
+        const latency = this.lastHeartbeatRtt;
+        const latencyText = latency === null ? "measuring…" : `${latency} ms`;
+        await this.sendMessage(message.channel_id, `🏓 Pong!\nGateway: **${latencyText}**`);
       } else if (command === "-fixture" || command.startsWith("-fixture ")) {
         await this.handleFixture(message);
       } else if (command === "-team" || command.startsWith("-team ")) {
