@@ -72,10 +72,13 @@ async function runCommand(interaction, env) {
     const prizeImageOption = option(opts, "prize_image");
     const prizeImage = prizeImageOption ? String(interaction.data.resolved?.attachments?.[prizeImageOption.value]?.url || "").trim() : "";
     const description = String(value(opts, "details") || "Registration is now open. Join before all places are filled.").trim();
-    const format = String(value(opts, "format") || "Single Elimination").trim();
+    const format = String(value(opts, "format") || "single_elimination").trim().toLowerCase();
+    const teamSize = Number(value(opts, "team_size") || 1);
+    if (!Number.isInteger(teamSize) || teamSize < 1 || teamSize > 32) return reply("Team size must be between 1 and 32.", true);
+    if (!["single_elimination", "round_robin", "league"].includes(format)) return reply("Choose Single Elimination, Round Robin or League format.", true);
     if (!name || !game || !announcementChannelId || !registrationChannelId || !Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 128) return reply("Please provide the tournament name, game, player limit, announcement channel and registration channel.", true);
     if (prizeImage) { try { const imageUrl = new URL(prizeImage); if (imageUrl.protocol !== "https:") throw new Error(); } catch { return reply("Prize image must be a valid HTTPS image URL.", true); } }
-    const result = await db.prepare("INSERT INTO tournaments (guild_id,name,game,max_players,created_by,announcement_channel_id,registration_channel_id,prize,prize_image_url,description,format) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(guildId, name, game, maxPlayers, interaction.member.user.id, announcementChannelId, registrationChannelId, prize.slice(0, 200), prizeImage || null, description.slice(0, 1000), format.slice(0, 80)).run();
+    const result = await db.prepare("INSERT INTO tournaments (guild_id,name,game,max_players,created_by,announcement_channel_id,registration_channel_id,prize,prize_image_url,description,format,team_size) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(guildId, name, game, maxPlayers, interaction.member.user.id, announcementChannelId, registrationChannelId, prize.slice(0, 200), prizeImage || null, description.slice(0, 1000), format, teamSize).run();
     const tournamentId = Number(result.meta.last_row_id);
     const t = await tournament(db, guildId, tournamentId);
     let pinned = false;
@@ -121,33 +124,50 @@ async function runCommand(interaction, env) {
     if (t.status !== "registration") return reply("That tournament has already started or is closed.", true);
     const { results: people = [] } = await db.prepare("SELECT user_id FROM participants WHERE tournament_id=? ORDER BY joined_at,id").bind(id).all();
     const players = people.map((p) => p.user_id);
-    if (players.length < 2) return reply("At least two players must register.", true);
+    if (players.length < 2) return reply("At least two players or teams must register.", true);
     for (let i = players.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [players[i], players[j]] = [players[j], players[i]]; }
-    const size = 2 ** Math.ceil(Math.log2(players.length));
-    const byeCount = size - players.length;
-    const slots = [];
-    for (let i = 0; i < byeCount; i++) slots.push(players[i], null);
-    for (let i = byeCount; i < players.length; i += 2) slots.push(players[i], players[i + 1] || null);
-    const rounds = Math.log2(size);
     const statements = [];
-    for (let round = 1; round <= rounds; round++) {
-      const count = size / (2 ** round);
-      for (let match = 1; match <= count; match++) {
-        const p1 = round === 1 ? slots[(match - 1) * 2] || null : null;
-        const p2 = round === 1 ? slots[(match - 1) * 2 + 1] || null : null;
-        const winner = round === 1 && p1 && !p2 ? p1 : null;
-        statements.push(db.prepare("INSERT INTO matches (tournament_id,round_number,match_number,player1_id,player2_id,winner_id,status) VALUES (?,?,?,?,?,?,?)").bind(id, round, match, p1, p2, winner, winner ? "completed" : "pending"));
+    const format = String(t.format || "single_elimination").toLowerCase().replace(/\s+/g, "_");
+    let rounds = 0;
+    if (format === "round_robin" || format === "league") {
+      const rotation = [...players];
+      if (rotation.length % 2) rotation.push(null);
+      const count = rotation.length;
+      rounds = count - 1;
+      for (let round = 1; round <= rounds; round++) {
+        for (let match = 0; match < count / 2; match++) {
+          const p1 = rotation[match];
+          const p2 = rotation[count - 1 - match];
+          if (p1 && p2) statements.push(db.prepare("INSERT INTO matches (tournament_id,round_number,match_number,player1_id,player2_id,status) VALUES (?,?,?,?,?,'pending')").bind(id, round, match + 1, p1, p2));
+        }
+        rotation.splice(1, 0, rotation.pop());
       }
-    }
-    const firstRound = slots.reduce((acc, player, index) => {
-      if (index % 2 === 0 && player && !slots[index + 1]) acc.push({ match: index / 2 + 1, player });
-      return acc;
-    }, []);
-    for (const bye of firstRound) {
-      const next = Math.ceil(bye.match / 2);
-      if (rounds >= 2) {
-        const column = bye.match % 2 === 1 ? "player1_id" : "player2_id";
-        statements.push(db.prepare(`UPDATE matches SET ${column}=? WHERE tournament_id=? AND round_number=2 AND match_number=?`).bind(bye.player, id, next));
+    } else {
+      const size = 2 ** Math.ceil(Math.log2(players.length));
+      const byeCount = size - players.length;
+      const slots = [];
+      for (let i = 0; i < byeCount; i++) slots.push(players[i], null);
+      for (let i = byeCount; i < players.length; i += 2) slots.push(players[i], players[i + 1] || null);
+      rounds = Math.log2(size);
+      for (let round = 1; round <= rounds; round++) {
+        const count = size / (2 ** round);
+        for (let match = 1; match <= count; match++) {
+          const p1 = round === 1 ? slots[(match - 1) * 2] || null : null;
+          const p2 = round === 1 ? slots[(match - 1) * 2 + 1] || null : null;
+          const winner = round === 1 && p1 && !p2 ? p1 : null;
+          statements.push(db.prepare("INSERT INTO matches (tournament_id,round_number,match_number,player1_id,player2_id,winner_id,status) VALUES (?,?,?,?,?,?,?)").bind(id, round, match, p1, p2, winner, winner ? "completed" : "pending"));
+        }
+      }
+      const firstRound = slots.reduce((acc, player, index) => {
+        if (index % 2 === 0 && player && !slots[index + 1]) acc.push({ match: index / 2 + 1, player });
+        return acc;
+      }, []);
+      for (const bye of firstRound) {
+        const next = Math.ceil(bye.match / 2);
+        if (rounds >= 2) {
+          const column = bye.match % 2 === 1 ? "player1_id" : "player2_id";
+          statements.push(db.prepare(`UPDATE matches SET ${column}=? WHERE tournament_id=? AND round_number=2 AND match_number=?`).bind(bye.player, id, next));
+        }
       }
     }
     statements.push(db.prepare("UPDATE tournaments SET status='ongoing',started_at=CURRENT_TIMESTAMP WHERE id=? AND guild_id=? AND status='registration'").bind(id, guildId));
@@ -183,15 +203,22 @@ async function runCommand(interaction, env) {
     const match = await db.prepare("SELECT * FROM matches WHERE tournament_id=? AND round_number=? AND match_number=?").bind(id, round, matchNo).first();
     if (!match || match.status !== "pending") return reply("That pending match could not be found.", true);
     if (![match.player1_id, match.player2_id].includes(winner)) return reply("The selected winner is not in that match.", true);
-    const nextRound = round + 1;
-    const nextMatchNo = Math.ceil(matchNo / 2);
-    const next = await db.prepare("SELECT * FROM matches WHERE tournament_id=? AND round_number=? AND match_number=?").bind(id, nextRound, nextMatchNo).first();
+    const isLeague = ["round_robin", "league"].includes(String(t.format || "").toLowerCase().replace(/\s+/g, "_"));
     const statements = [db.prepare("UPDATE matches SET winner_id=?,score=?,status='completed' WHERE id=? AND status='pending'").bind(winner, value(opts, "score") || null, match.id)];
-    if (next) {
-      const column = matchNo % 2 === 1 ? "player1_id" : "player2_id";
-      statements.push(db.prepare(`UPDATE matches SET ${column}=(SELECT winner_id FROM matches WHERE id=? AND status='completed') WHERE id=? AND ${column} IS NULL`).bind(match.id, next.id));
+    if (!isLeague) {
+      const nextRound = round + 1;
+      const nextMatchNo = Math.ceil(matchNo / 2);
+      const next = await db.prepare("SELECT * FROM matches WHERE tournament_id=? AND round_number=? AND match_number=?").bind(id, nextRound, nextMatchNo).first();
+      if (next) {
+        const column = matchNo % 2 === 1 ? "player1_id" : "player2_id";
+        statements.push(db.prepare(`UPDATE matches SET ${column}=(SELECT winner_id FROM matches WHERE id=? AND status='completed') WHERE id=? AND ${column} IS NULL`).bind(match.id, next.id));
+      } else {
+        const pending = await db.prepare("SELECT COUNT(*) AS count FROM matches WHERE tournament_id=? AND status='pending' AND id<>?").bind(id, match.id).first();
+        if (Number(pending?.count || 0) === 0) statements.push(db.prepare("UPDATE tournaments SET status='completed',completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(id));
+      }
     } else {
-      statements.push(db.prepare("UPDATE tournaments SET status='completed',completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(id));
+      const pending = await db.prepare("SELECT COUNT(*) AS count FROM matches WHERE tournament_id=? AND status='pending' AND id<>?").bind(id, match.id).first();
+      if (Number(pending?.count || 0) === 0) statements.push(db.prepare("UPDATE tournaments SET status='completed',completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(id));
     }
     await db.batch(statements);
     return embedReply("Result recorded", `Winner: <@${winner}>${value(opts, "score") ? `\nScore: ${value(opts, "score")}` : ""}`, 0x16A34A);
@@ -220,7 +247,8 @@ async function registerCommands(env) {
         { type: 3, name: "prize", description: "Prize details", required: false, max_length: 200 },
         { type: 11, name: "prize_image", description: "Upload the prize image", required: false },
         { type: 3, name: "details", description: "Tournament description and rules summary", required: false, max_length: 1000 },
-        { type: 3, name: "format", description: "Tournament format", required: false, max_length: 80 }
+        { type: 3, name: "format", description: "Tournament format", required: false, choices: [{name:"Single Elimination",value:"single_elimination"},{name:"Round Robin",value:"round_robin"},{name:"League",value:"league"}] },
+        { type: 4, name: "team_size", description: "Players per team (1 for solo)", required: false, min_value: 1, max_value: 32 }
       ]},
       { type: 1, name: "list", description: "List this server's tournaments" },
       { type: 1, name: "register", description: "Register for a tournament", options: [{ type: 4, name: "id", description: "Tournament ID", required: true, min_value: 1 }] },
