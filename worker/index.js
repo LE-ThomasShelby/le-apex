@@ -7,12 +7,21 @@ function hexToBytes(hex) {
   return Uint8Array.from(hex.match(/.{2}/g), (b) => parseInt(b, 16));
 }
 function fromHex(hex) { return Uint8Array.from(hex.match(/.{2}/g) || [], (b) => parseInt(b, 16)); }
-async function verifyDiscordRequest(request, body, publicKey) {
+async function verifyDiscordRequest(request, body, env) {
   const signature = request.headers.get("X-Signature-Ed25519");
   const timestamp = request.headers.get("X-Signature-Timestamp");
   if (!signature || !timestamp || !/^\d+$/.test(timestamp)) return false;
   if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
   try {
+    let publicKey = env.DISCORD_PUBLIC_KEY;
+    if (!publicKey) {
+      const identity = await fetch(`${API}/applications/@me`, {
+        headers: { Authorization: `Bot ${env.DISCORD_TOKEN}` }
+      });
+      if (!identity.ok) return false;
+      publicKey = (await identity.json()).verify_key;
+    }
+    if (!publicKey) return false;
     const key = await crypto.subtle.importKey("raw", hexToBytes(publicKey), { name: "Ed25519" }, false, ["verify"]);
     return crypto.subtle.verify({ name: "Ed25519" }, key, fromHex(signature), new TextEncoder().encode(timestamp + body));
   } catch { return false; }
@@ -297,7 +306,7 @@ export default {
     }
     if (request.method !== "POST" || url.pathname !== "/interactions") return new Response("Not found", { status: 404 });
     const body = await request.text();
-    if (!await verifyDiscordRequest(request, body, env.DISCORD_PUBLIC_KEY)) return new Response("Invalid request signature", { status: 401 });
+    if (!await verifyDiscordRequest(request, body, env)) return new Response("Invalid request signature", { status: 401 });
     let interaction;
     try { interaction = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400 }); }
     if (interaction.type === 1) return json({ type: 1 });
