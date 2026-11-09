@@ -264,7 +264,18 @@ async function registerCommands(env) {
       { type: 1, name: "cancel", description: "Cancel a tournament", options: [{ type: 4, name: "id", description: "Tournament ID", required: true, min_value: 1 }] }
     ]
   }];
-  const response = await fetch(`${API}/applications/${env.DISCORD_APPLICATION_ID}/commands`, {
+  if (!env.DISCORD_TOKEN) throw new Error("LE-APEX is missing its Discord bot token configuration.");
+  let applicationId = String(env.DISCORD_APPLICATION_ID || "").trim();
+  if (!applicationId) {
+    const identityResponse = await fetch(`${API}/users/@me`, {
+      headers: { Authorization: `Bot ${env.DISCORD_TOKEN}` }
+    });
+    if (!identityResponse.ok) throw new Error(`Unable to identify the LE-APEX Discord application: ${identityResponse.status} ${await identityResponse.text()}`);
+    const identity = await identityResponse.json();
+    applicationId = String(identity.id || "");
+  }
+  if (!/^\\d{17,20}$/.test(applicationId)) throw new Error("LE-APEX could not resolve a valid Discord application ID from its bot identity.");
+  const response = await fetch(`${API}/applications/${applicationId}/commands`, {
     method: "PUT",
     headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, "Content-Type": "application/json" },
     body: JSON.stringify(commands)
