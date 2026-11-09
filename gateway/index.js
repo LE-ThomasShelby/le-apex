@@ -296,6 +296,8 @@ export class DiscordGateway extends DurableObject {
       console.error("LE-APEX prefix registration error", error);
       await this.sendMessage(channelId, "LE-APEX couldn't process that registration just now. Please try again in a moment.");
     }
+  }
+
   async handleTeamRegistration(message, t, withdraw) {
     const userId = message.author.id;
     const channelId = message.channel_id;
