@@ -55,6 +55,22 @@ export class DiscordGateway extends DurableObject {
     this.stopped = false;
   }
 
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/start") {
+      try {
+        const status = await this.start();
+        return Response.json({ ok: true, status, message: "Gateway startup requested." });
+      } catch (error) {
+        return Response.json({ ok: false, error: error.message }, { status: 500 });
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/status") {
+      return Response.json(await this.status());
+    }
+    return new Response("Not found", { status: 404 });
+  }
+
   async start() {
     if (!this.env.DISCORD_TOKEN) throw new Error("Add the DISCORD_TOKEN secret to this Gateway Worker first.");
     this.stopped = false;
@@ -418,20 +434,13 @@ export class DiscordGateway extends DurableObject {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const gateway = env.GATEWAY.getByName("le-apex-gateway");
     if (request.method === "GET" && url.pathname === "/") {
-      return Response.json({ service: "LE-APEX Gateway", message: "Gateway service ready. Configure DISCORD_TOKEN, then open /start.", status: "idle" });
+      return Response.json({ service: "LE-APEX Gateway", message: "Gateway service ready.", status: "ready" });
     }
-    if (request.method === "GET" && url.pathname === "/start") {
-      try {
-        const status = await gateway.start();
-        return Response.json({ ok: true, status, message: "Gateway startup requested." });
-      } catch (error) {
-        return Response.json({ ok: false, error: error.message }, { status: 500 });
-      }
-    }
-    if (request.method === "GET" && url.pathname === "/status") {
-      return Response.json(await gateway.status());
+    if (request.method === "GET" && (url.pathname === "/start" || url.pathname === "/status")) {
+      const id = env.GATEWAY.idFromName("le-apex-gateway");
+      const stub = env.GATEWAY.get(id);
+      return stub.fetch(new Request(`https://gateway.internal${url.pathname}`));
     }
     return new Response("Not found", { status: 404 });
   }
