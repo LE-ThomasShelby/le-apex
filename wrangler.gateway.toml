@@ -1,0 +1,16 @@
+name = "le-apex-gateway"
+main = "gateway/index.js"
+compatibility_date = "2026-11-09"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "le-apex"
+database_id = "d6b43704-4a09-499c-9735-acbb4426945f"
+
+[[durable_objects.bindings]]
+name = "GATEWAY"
+class_name = "DiscordGateway"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DiscordGateway"]
