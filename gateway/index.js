@@ -217,6 +217,7 @@ export class DiscordGateway extends DurableObject {
     if (packet.op === 11) {
       if (this.heartbeatSentAt !== null) {
         this.lastHeartbeatRtt = Math.max(0, Date.now() - this.heartbeatSentAt);
+        await this.ctx.storage.put("gateway_latency_ms", this.lastHeartbeatRtt);
         this.heartbeatSentAt = null;
       }
       this.awaitingAck = false;
@@ -268,7 +269,8 @@ export class DiscordGateway extends DurableObject {
       }
       if (command === "-ping") {
         await this.ctx.storage.put("diag_ping_commands", Number(await this.ctx.storage.get("diag_ping_commands") || 0) + 1);
-        const latency = this.lastHeartbeatRtt;
+        const storedLatency = await this.ctx.storage.get("gateway_latency_ms");
+        const latency = storedLatency === undefined || storedLatency === null ? this.lastHeartbeatRtt : Number(storedLatency);
         const latencyText = latency === null ? "measuring…" : `${latency} ms`;
         await this.sendMessage(message.channel_id, `🏓 Pong!\nGateway: **${latencyText}**`);
       } else if (command === "-fixture" || command.startsWith("-fixture ")) {
