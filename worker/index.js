@@ -69,7 +69,8 @@ async function runCommand(interaction, env) {
     const announcementChannelId = value(opts, "announcement_channel");
     const registrationChannelId = value(opts, "registration_channel");
     const prize = String(value(opts, "prize") || "To be announced").trim();
-    const prizeImage = String(value(opts, "prize_image") || "").trim();
+    const prizeImageOption = option(opts, "prize_image");
+    const prizeImage = prizeImageOption ? String(interaction.data.resolved?.attachments?.[prizeImageOption.value]?.url || "").trim() : "";
     const description = String(value(opts, "details") || "Registration is now open. Join before all places are filled.").trim();
     const format = String(value(opts, "format") || "Single Elimination").trim();
     if (!name || !game || !announcementChannelId || !registrationChannelId || !Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 128) return reply("Please provide the tournament name, game, player limit, announcement channel and registration channel.", true);
@@ -217,7 +218,7 @@ async function registerCommands(env) {
         { type: 7, name: "announcement_channel", description: "Channel for the tournament announcement", required: true, channel_types: [0] },
         { type: 7, name: "registration_channel", description: "Channel for the registration desk", required: true, channel_types: [0] },
         { type: 3, name: "prize", description: "Prize details", required: false, max_length: 200 },
-        { type: 3, name: "prize_image", description: "HTTPS URL of the prize image", required: false, max_length: 400 },
+        { type: 11, name: "prize_image", description: "Upload the prize image", required: false },
         { type: 3, name: "details", description: "Tournament description and rules summary", required: false, max_length: 1000 },
         { type: 3, name: "format", description: "Tournament format", required: false, max_length: 80 }
       ]},
