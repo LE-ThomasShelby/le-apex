@@ -109,6 +109,7 @@ async function runCommand(interaction, env) {
     try {
       const inserted = await db.prepare("INSERT INTO participants (tournament_id,user_id,display_name) SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM participants WHERE tournament_id=?) < (SELECT max_players FROM tournaments WHERE id=? AND guild_id=? AND status='registration')").bind(id, userId, displayName, id, id, guildId).run();
       if (!inserted.meta.changes) return reply("This tournament is full or registration has just closed.", true);
+      try { await updateRegistrationPanel(env, t); } catch (panelError) { console.warn("Registration succeeded but panel update failed", panelError); }
       return embedReply("Registration confirmed", `You're registered for **${t.name}** (#${id}). Good luck!`, 0x16A34A, true);
     } catch { return reply("Registration could not be completed. You may already be registered.", true); }
   }
@@ -150,6 +151,7 @@ async function runCommand(interaction, env) {
     }
     statements.push(db.prepare("UPDATE tournaments SET status='ongoing',started_at=CURRENT_TIMESTAMP WHERE id=? AND guild_id=? AND status='registration'").bind(id, guildId));
     await db.batch(statements);
+    try { await updateRegistrationPanel(env, t); } catch (panelError) { console.warn("Bracket generated but registration panel update failed", panelError); }
     return embedReply("Bracket generated", `**${t.name}**\nPlayers: **${players.length}**\nRounds: **${rounds}**\n\nUse /tournament bracket id:${id} to view the draw.`, 0x16A34A);
   }
   if (action === "bracket") {
@@ -199,6 +201,7 @@ async function runCommand(interaction, env) {
     if (!t) return reply("That tournament does not exist in this server.", true);
     if (["completed", "cancelled"].includes(t.status)) return reply("That tournament is already finished or cancelled.", true);
     await db.prepare("UPDATE tournaments SET status='cancelled' WHERE id=? AND guild_id=?").bind(id, guildId).run();
+    try { await updateRegistrationPanel(env, { ...t, status: "cancelled" }); } catch (panelError) { console.warn("Tournament cancelled but registration panel update failed", panelError); }
     return embedReply("Tournament cancelled", `**${t.name}** has been cancelled.`, 0xD97706);
   }
   return reply("Unknown tournament command.", true);
