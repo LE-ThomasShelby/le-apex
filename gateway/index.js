@@ -290,12 +290,21 @@ export class DiscordGateway extends DurableObject {
         );
       } else if (command === "-reg") await this.handleRegistration(message, false);
       else if (command === "-unreg") await this.handleRegistration(message, true);
+      else if (command.startsWith("-")) {
+        await this.sendMessage(message.channel_id, "I don't recognize that command. Use **-help** to see the available LE-APEX commands.");
+      }
     }
   }
 
   async sendMessage(channelId, content, userId) {
     const body = {
-      content,
+      embeds: [{
+        title: "LE-APEX • Tournament Manager",
+        description: String(content || "No details provided.").slice(0, 4096),
+        color: 0xC9A34D,
+        footer: { text: "LE-APEX • Multi-server Tournament Manager" },
+        timestamp: new Date().toISOString()
+      }],
       allowed_mentions: userId ? { parse: [], users: [userId] } : { parse: [] }
     };
     const response = await fetch(`${API}/channels/${channelId}/messages`, {
