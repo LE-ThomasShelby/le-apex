@@ -199,8 +199,20 @@ export class DiscordGateway extends DurableObject {
     if (packet.t === "MESSAGE_CREATE") {
       const message = packet.d;
       if (!message.guild_id || message.author?.bot || message.webhook_id) return;
-      const command = String(message.content || "").trim().toLowerCase();
-      if (command === ".reg") await this.handleRegistration(message, false);
+      const rawCommand = String(message.content || "").trim();
+      const command = rawCommand.toLowerCase();
+      if (command === ".ping") {
+        await this.sendMessage(message.channel_id, "🏓 Pong! LE-APEX is online.");
+      } else if (command === ".help") {
+        await this.sendMessage(message.channel_id,
+          "**LE-APEX — COMMAND GUIDE**\n" +
+          "".ping — Check bot response/status\n" +
+          "".help — Show this guide\n" +
+          "".reg — Register for the open tournament in this channel\n" +
+          "".unreg — Withdraw before the tournament starts\n" +
+          "Use /tournament to create, manage, start and view tournaments."
+        );
+      } else if (command === ".reg") await this.handleRegistration(message, false);
       else if (command === ".unreg") await this.handleRegistration(message, true);
     }
   }
