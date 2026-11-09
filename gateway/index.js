@@ -68,6 +68,29 @@ export class DiscordGateway extends DurableObject {
     if (request.method === "GET" && url.pathname === "/status") {
       return Response.json(await this.status());
     }
+    if (request.method === "GET" && url.pathname === "/reidentify") {
+      try {
+        this.stopped = true;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+        this.clearHeartbeat();
+        const previousSocket = this.ws;
+        this.ws = null;
+        if (previousSocket && previousSocket.readyState <= WebSocket.OPEN) previousSocket.close(1000, "Refreshing Gateway intents");
+        await this.ctx.storage.delete("session_id");
+        await this.ctx.storage.delete("resume_gateway_url");
+        await this.ctx.storage.delete("sequence");
+        this.sequence = null;
+        this.stopped = false;
+        await this.ctx.storage.put("gateway_status", "connecting");
+        await this.connect();
+        return Response.json({ ok: true, message: "Fresh Discord Gateway Identify requested with configured intents." });
+      } catch (error) {
+        this.stopped = false;
+        await this.ctx.storage.put("gateway_status", "connection_error");
+        return Response.json({ ok: false, error: error.message }, { status: 500 });
+      }
+    }
     return new Response("Not found", { status: 404 });
   }
 
