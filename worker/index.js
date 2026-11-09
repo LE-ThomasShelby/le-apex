@@ -27,7 +27,19 @@ async function verifyDiscordRequest(request, body, env) {
   } catch { return false; }
 }
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8" } });
-const reply = (content, ephemeral = false) => ({ type: 4, data: { content, ...(ephemeral ? { flags: EPHEMERAL } : {}) } });
+const reply = (content, ephemeral = false) => ({
+  type: 4,
+  data: {
+    embeds: [{
+      title: "LE-APEX • Tournament Manager",
+      description: String(content || "No details provided.").slice(0, 4096),
+      color: 0xC9A34D,
+      footer: { text: "LE-APEX • Multi-server Tournament Manager" },
+      timestamp: new Date().toISOString()
+    }],
+    ...(ephemeral ? { flags: EPHEMERAL } : {})
+  }
+});
 const embedReply = (title, description, color = 0x7C3AED, ephemeral = false) => ({
   type: 4, data: { embeds: [{ title, description, color, footer: { text: "LE-APEX • Multi-server Tournament Manager" } }], ...(ephemeral ? { flags: EPHEMERAL } : {}) }
 });
