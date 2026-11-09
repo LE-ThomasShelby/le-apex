@@ -56,7 +56,7 @@ function registrationEmbed(t, count) {
   return { title: `📋 OFFICIAL REGISTRATION — ${t.name}`, description: open ? `Registration is open. Type **-reg** in this channel to secure your place. Use **-unreg** to withdraw before the tournament starts.\n\nOne account = one entry. Your place is confirmed only after LE-APEX replies.` : full ? "All tournament slots have been filled. Registration is closed." : "Registration is closed. Follow the announcement channel for tournament updates.", color: open ? 0xC9A34D : 0x64748B, fields: [{ name: Number(t.team_size || 1) > 1 ? "Teams" : "Players", value: `**${count} / ${t.max_players}**`, inline: true }, { name: "Status", value: full ? "FULL" : open ? "OPEN" : "CLOSED", inline: true }, { name: "Tournament ID", value: `#${t.id}`, inline: true }], footer: { text: "LE-APEX • Official Registration Desk" } };
 }
 async function updateRegistrationPanel(env, t) {
-  if (!t-registration_channel_id || !t-registration_message_id) return;
+  if (!t-registration_channel_id || !t.registration_message_id) return;
   const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id=?").bind(t.id).first();
   await discordApi(env, `/channels/${t-registration_channel_id}/messages/${t-registration_message_id}`, "PATCH", { embeds: [registrationEmbed(t, Number(row?.count || 0))] });
 }
