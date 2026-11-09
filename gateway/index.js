@@ -214,6 +214,8 @@ export class DiscordGateway extends DurableObject {
           "".help — Show this guide\n" +
           "".reg — Register for the open tournament in this channel\n" +
           "".unreg — Withdraw before the tournament starts\n" +
+          ".fixture — View your own upcoming and completed matchups\\n" +
+          ".team create/join/leave/list — Build and manage a team in team tournaments\\n" +
           "Use /tournament to create, manage, start and view tournaments."
         );
       } else if (command === ".reg") await this.handleRegistration(message, false);
@@ -337,6 +339,8 @@ export class DiscordGateway extends DurableObject {
         if (!name) { await this.sendMessage(channelId, "Usage: .team create Team Name"); return; }
         const existing = await this.env.DB.prepare("SELECT id FROM teams WHERE tournament_id=? AND captain_id=?").bind(t.id, userId).first();
         if (existing) { await this.sendMessage(channelId, "You already captain team #" + existing.id + ". Use .team list."); return; }
+        const membership = await this.env.DB.prepare("SELECT team_id FROM team_members WHERE tournament_id=? AND user_id=?").bind(t.id, userId).first();
+        if (membership) { await this.sendMessage(channelId, "You're already assigned to a team in this tournament."); return; }
         const created = await this.env.DB.prepare("INSERT INTO teams (tournament_id,name,captain_id) VALUES (?,?,?)").bind(t.id, name, userId).run();
         const teamId = Number(created.meta.last_row_id);
         const displayName = message.member?.nick || message.author.global_name || message.author.username || "Captain";
