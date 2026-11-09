@@ -274,7 +274,7 @@ async function registerCommands(env) {
     const identity = await identityResponse.json();
     applicationId = String(identity.id || "");
   }
-  if (!/^\\d{17,20}$/.test(applicationId)) throw new Error("LE-APEX could not resolve a valid Discord application ID from its bot identity.");
+  if (!/^\d{17,20}$/.test(applicationId)) throw new Error("LE-APEX could not resolve a valid Discord application ID from its bot identity.");
   const response = await fetch(`${API}/applications/${applicationId}/commands`, {
     method: "PUT",
     headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, "Content-Type": "application/json" },
