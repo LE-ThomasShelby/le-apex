@@ -290,6 +290,12 @@ async function registerCommands(env) {
     body: JSON.stringify(commands)
   });
   if (!response.ok) throw new Error(`Discord command registration failed: ${response.status} ${await response.text()}`);
+  const endpointResponse = await fetch(`${API}/applications/@me`, {
+    method: "PATCH",
+    headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ interactions_endpoint_url: "https://le-apex.habibishawarma.workers.dev/interactions" })
+  });
+  if (!endpointResponse.ok) throw new Error(`Discord interaction endpoint configuration failed: ${endpointResponse.status} ${await endpointResponse.text()}`);
 }
 
 export default {
