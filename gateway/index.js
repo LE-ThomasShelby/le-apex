@@ -413,7 +413,6 @@ export class DiscordGateway extends DurableObject {
       await this.sendMessage(message.channel_id, "I couldn't load your fixtures just now. Please try again.");
     }
   }
-  }
 }
 
 export default {
