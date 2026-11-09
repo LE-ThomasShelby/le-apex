@@ -482,7 +482,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/") {
       return Response.json({ service: "LE-APEX Gateway", message: "Gateway service ready.", status: "ready" });
     }
-    if (request.method === "GET" && (url.pathname === "/start" || url.pathname === "/status")) {
+    if (request.method === "GET" && (url.pathname === "/start" || url.pathname === "/status" || url.pathname === "/reidentify")) {
       const id = env.GATEWAY.idFromName("le-apex-gateway");
       const stub = env.GATEWAY.get(id);
       return stub.fetch(new Request(`https://gateway.internal${url.pathname}`));
