@@ -214,8 +214,8 @@ export class DiscordGateway extends DurableObject {
           ".help — Show this guide\n" +
           ".reg — Register for the open tournament in this channel\n" +
           ".unreg — Withdraw before the tournament starts\n" +
-          ".fixture — View your own upcoming and completed matchups\\n" +
-          ".team create/join/leave/list — Build and manage a team in team tournaments\\n" +
+          ".fixture — View your own upcoming and completed matchups\n" +
+          ".team create/join/leave/list — Build and manage a team in team tournaments\n" +
           "Use /tournament to create, manage, start and view tournaments."
         );
       } else if (command === ".reg") await this.handleRegistration(message, false);
@@ -383,10 +383,10 @@ export class DiscordGateway extends DurableObject {
       if (action === "list") {
         const result = await this.env.DB.prepare("SELECT te.id,te.name,COUNT(tm.user_id) AS member_count FROM teams te LEFT JOIN team_members tm ON tm.team_id=te.id WHERE te.tournament_id=? GROUP BY te.id ORDER BY te.id").bind(t.id).all();
         const rows = result.results || [];
-        await this.sendMessage(channelId, rows.length ? rows.map(x => "#" + x.id + " — " + x.name + " (" + x.member_count + "/" + t.team_size + ")").join("\\n") : "No teams have been created yet.");
+        await this.sendMessage(channelId, rows.length ? rows.map(x => "#" + x.id + " — " + x.name + " (" + x.member_count + "/" + t.team_size + ")").join("\n") : "No teams have been created yet.");
         return;
       }
-      await this.sendMessage(channelId, "TEAM COMMANDS\\n.team create Team Name — Create a team\\n.team join TEAM_ID — Join a team\\n.team leave — Leave your team\\n.team list — Show teams\\n.team disband — Disband your team (captain only)");
+      await this.sendMessage(channelId, "TEAM COMMANDS\n.team create Team Name — Create a team\n.team join TEAM_ID — Join a team\n.team leave — Leave your team\n.team list — Show teams\n.team disband — Disband your team (captain only)");
     } catch (error) {
       console.error("LE-APEX team command error", error);
       await this.sendMessage(channelId, "Team command failed. Make sure you're using the active registration channel.");
@@ -405,9 +405,9 @@ export class DiscordGateway extends DurableObject {
         const state = m.status === "completed" ? "Completed" : "Upcoming";
         const winner = m.winner_name ? " — Winner: " + m.winner_name : "";
         const score = m.score ? " — " + m.score : "";
-        return m.tournament_name + " · Round " + m.round_number + " · Match " + m.match_number + "\\n" + p1 + " vs " + p2 + " · " + state + winner + score;
+        return m.tournament_name + " · Round " + m.round_number + " · Match " + m.match_number + "\n" + p1 + " vs " + p2 + " · " + state + winner + score;
       });
-      await this.sendMessage(message.channel_id, lines.join("\\n\\n"));
+      await this.sendMessage(message.channel_id, lines.join("\n\n"));
     } catch (error) {
       console.error("LE-APEX fixture lookup error", error);
       await this.sendMessage(message.channel_id, "I couldn't load your fixtures just now. Please try again.");
