@@ -151,7 +151,7 @@ async function runCommand(interaction, env) {
     }
     statements.push(db.prepare("UPDATE tournaments SET status='ongoing',started_at=CURRENT_TIMESTAMP WHERE id=? AND guild_id=? AND status='registration'").bind(id, guildId));
     await db.batch(statements);
-    try { await updateRegistrationPanel(env, t); } catch (panelError) { console.warn("Bracket generated but registration panel update failed", panelError); }
+    try { await updateRegistrationPanel(env, { ...t, status: "ongoing" }); } catch (panelError) { console.warn("Bracket generated but registration panel update failed", panelError); }
     return embedReply("Bracket generated", `**${t.name}**\nPlayers: **${players.length}**\nRounds: **${rounds}**\n\nUse /tournament bracket id:${id} to view the draw.`, 0x16A34A);
   }
   if (action === "bracket") {
