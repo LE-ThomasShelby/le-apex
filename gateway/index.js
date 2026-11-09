@@ -36,9 +36,9 @@ function registrationEmbed(t, count) {
 }
 
 async function updateRegistrationPanel(env, t) {
-  if (!t-registration_channel_id || !t-registration_message_id) return;
+  if (!t.registration_channel_id || !t.registration_message_id) return;
   const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id=?").bind(t.id).first();
-  await discordApi(env, `/channels/${t-registration_channel_id}/messages/${t-registration_message_id}`, "PATCH", {
+  await discordApi(env, `/channels/${t.registration_channel_id}/messages/${t.registration_message_id}`, "PATCH", {
     embeds: [registrationEmbed(t, Number(row?.count || 0))]
   });
 }
@@ -84,7 +84,14 @@ export class DiscordGateway extends DurableObject {
   async status() {
     return {
       status: await this.ctx.storage.get("gateway_status") || "not_started",
-      session: Boolean(await this.ctx.storage.get("session_id"))
+      session: Boolean(await this.ctx.storage.get("session_id")),
+      messageEvents: Number(await this.ctx.storage.get("diag_message_events") || 0),
+      ignoredBotMessages: Number(await this.ctx.storage.get("diag_ignored_bot_messages") || 0),
+      prefixedMessages: Number(await this.ctx.storage.get("diag_prefixed_messages") || 0),
+      pingCommands: Number(await this.ctx.storage.get("diag_ping_commands") || 0),
+      sendFailures: Number(await this.ctx.storage.get("diag_send_failures") || 0),
+      lastMessageAt: await this.ctx.storage.get("diag_last_message_at") || null,
+      lastMessageHadContent: await this.ctx.storage.get("diag_last_message_had_content") || false
     };
   }
 
@@ -214,10 +221,22 @@ export class DiscordGateway extends DurableObject {
     }
     if (packet.t === "MESSAGE_CREATE") {
       const message = packet.d;
-      if (!message.guild_id || message.author?.bot || message.webhook_id) return;
+      await this.ctx.storage.put("diag_message_events", Number(await this.ctx.storage.get("diag_message_events") || 0) + 1);
+      await this.ctx.storage.put("diag_last_message_at", new Date().toISOString());
+      await this.ctx.storage.put("diag_last_message_had_content", Boolean(message.content));
+      if (!message.guild_id || message.author?.bot || message.webhook_id) {
+        if (message.author?.bot || message.webhook_id) {
+          await this.ctx.storage.put("diag_ignored_bot_messages", Number(await this.ctx.storage.get("diag_ignored_bot_messages") || 0) + 1);
+        }
+        return;
+      }
       const rawCommand = String(message.content || "").trim();
       const command = rawCommand.toLowerCase();
+      if (command.startsWith("-")) {
+        await this.ctx.storage.put("diag_prefixed_messages", Number(await this.ctx.storage.get("diag_prefixed_messages") || 0) + 1);
+      }
       if (command === "-ping") {
+        await this.ctx.storage.put("diag_ping_commands", Number(await this.ctx.storage.get("diag_ping_commands") || 0) + 1);
         await this.sendMessage(message.channel_id, "🏓 Pong! LE-APEX is online.");
       } else if (command === "-fixture" || command.startsWith("-fixture ")) {
         await this.handleFixture(message);
@@ -249,7 +268,10 @@ export class DiscordGateway extends DurableObject {
       headers: { Authorization: `Bot ${this.env.DISCORD_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    if (!response.ok) console.error("LE-APEX could not send registration response", response.status, await response.text());
+    if (!response.ok) {
+      await this.ctx.storage.put("diag_send_failures", Number(await this.ctx.storage.get("diag_send_failures") || 0) + 1);
+      console.error("LE-APEX could not send Discord response", response.status, await response.text());
+    }
   }
 
   async handleRegistration(message, withdraw) {
@@ -258,7 +280,7 @@ export class DiscordGateway extends DurableObject {
     const userId = message.author.id;
     try {
       const result = await this.env.DB.prepare(
-        "SELECT t.*, COUNT(p.id) AS player_count FROM tournaments t LEFT JOIN participants p ON p.tournament_id=t.id WHERE t.guild_id=? AND t-registration_channel_id=? AND t.status='registration' GROUP BY t.id ORDER BY t.id"
+        "SELECT t.*, COUNT(p.id) AS player_count FROM tournaments t LEFT JOIN participants p ON p.tournament_id=t.id WHERE t.guild_id=? AND t.registration_channel_id=? AND t.status='registration' GROUP BY t.id ORDER BY t.id"
       ).bind(guildId, channelId).all();
       const tournaments = result.results || [];
       if (!tournaments.length) {
@@ -346,7 +368,7 @@ export class DiscordGateway extends DurableObject {
   async handleTeam(message) {
     const channelId = message.channel_id;
     const userId = message.author.id;
-    const args = String(message.content || "").trim().split(/\\s+/);
+    const args = String(message.content || "").trim().split(/\s+/);
     const action = (args[1] || "").toLowerCase();
     try {
       const t = await this.env.DB.prepare("SELECT * FROM tournaments WHERE guild_id=? AND registration_channel_id=? AND status='registration' ORDER BY id DESC LIMIT 1").bind(message.guild_id, channelId).first();
