@@ -273,7 +273,7 @@ export class DiscordGateway extends DurableObject {
         return;
       }
       const t = tournaments[0];
-      if (Number(t-team_size || 1) > 1) {
+      if (Number(t.team_size || 1) > 1) {
         await this.handleTeamRegistration(message, t, withdraw);
         return;
       }
@@ -318,7 +318,7 @@ export class DiscordGateway extends DurableObject {
     const userId = message.author.id;
     const channelId = message.channel_id;
     try {
-      const team = await this.env.DB.prepare("SELECT te.*, COUNT(tm.user_id) AS member_count FROM teams te LEFT JOIN team_members tm ON tm-team_id=te.id WHERE te.tournament_id=? AND te.captain_id=? GROUP BY te.id").bind(t.id, userId).first();
+      const team = await this.env.DB.prepare("SELECT te.*, COUNT(tm.user_id) AS member_count FROM teams te LEFT JOIN team_members tm ON tm.team_id=te.id WHERE te.tournament_id=? AND te.captain_id=? GROUP BY te.id").bind(t.id, userId).first();
       if (withdraw) {
         if (!team) { await this.sendMessage(channelId, "Only the team captain can withdraw a registered team."); return; }
         await this.env.DB.prepare("DELETE FROM participants WHERE tournament_id=? AND user_id=?").bind(t.id, userId).run();
@@ -328,7 +328,7 @@ export class DiscordGateway extends DurableObject {
         return;
       }
       if (!team) { await this.sendMessage(channelId, "Create a team first with -team create Team Name, then ask teammates to use -team join TEAM_ID."); return; }
-      if (Number(team.member_count) !== Number(t-team_size)) { await this.sendMessage(channelId, "Your roster is incomplete: " + team.member_count + "/" + t-team_size + " members. Fill every slot before -reg."); return; }
+      if (Number(team.member_count) !== Number(t.team_size)) { await this.sendMessage(channelId, "Your roster is incomplete: " + team.member_count + "/" + t.team_size + " members. Fill every slot before -reg."); return; }
       const existing = await this.env.DB.prepare("SELECT 1 AS found FROM participants WHERE tournament_id=? AND user_id=?").bind(t.id, userId).first();
       if (existing) { await this.sendMessage(channelId, "Your team is already registered for " + t.name + "."); return; }
       const count = await this.env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id=?").bind(t.id).first();
@@ -351,7 +351,7 @@ export class DiscordGateway extends DurableObject {
     try {
       const t = await this.env.DB.prepare("SELECT * FROM tournaments WHERE guild_id=? AND registration_channel_id=? AND status='registration' ORDER BY id DESC LIMIT 1").bind(message.guild_id, channelId).first();
       if (!t) { await this.sendMessage(channelId, "Use team commands in the registration channel of an open tournament."); return; }
-      if (Number(t-team_size || 1) <= 1) { await this.sendMessage(channelId, "This tournament is set up for solo entries, not teams."); return; }
+      if (Number(t.team_size || 1) <= 1) { await this.sendMessage(channelId, "This tournament is set up for solo entries, not teams."); return; }
       if (action === "create") {
         const name = String(message.content || "").trim().replace(/^-team\s+create\s+/i, "").trim().slice(0, 40);
         if (!name) { await this.sendMessage(channelId, "Usage: -team create Team Name"); return; }
@@ -363,7 +363,7 @@ export class DiscordGateway extends DurableObject {
         const teamId = Number(created.meta.last_row_id);
         const displayName = message.member?.nick || message.author.global_name || message.author.username || "Captain";
         await this.env.DB.prepare("INSERT INTO team_members (tournament_id,team_id,user_id,display_name) VALUES (?,?,?,?)").bind(t.id, teamId, userId, displayName).run();
-        await this.sendMessage(channelId, "Team " + name + " created! Share team ID #" + teamId + ". Roster: 1/" + t-team_size + ". Teammates: -team join " + teamId);
+        await this.sendMessage(channelId, "Team " + name + " created! Share team ID #" + teamId + ". Roster: 1/" + t.team_size + ". Teammates: -team join " + teamId);
         return;
       }
       if (action === "join") {
@@ -372,15 +372,15 @@ export class DiscordGateway extends DurableObject {
         const team = await this.env.DB.prepare("SELECT * FROM teams WHERE id=? AND tournament_id=?").bind(teamId, t.id).first();
         if (!team) { await this.sendMessage(channelId, "That team ID isn't part of this tournament."); return; }
         const count = await this.env.DB.prepare("SELECT COUNT(*) AS count FROM team_members WHERE team_id=?").bind(teamId).first();
-        if (Number(count?.count || 0) >= Number(t-team_size)) { await this.sendMessage(channelId, "That team roster is full."); return; }
+        if (Number(count?.count || 0) >= Number(t.team_size)) { await this.sendMessage(channelId, "That team roster is full."); return; }
         const displayName = message.member?.nick || message.author.global_name || message.author.username || "Player";
         const joined = await this.env.DB.prepare("INSERT INTO team_members (tournament_id,team_id,user_id,display_name) VALUES (?,?,?,?) ON CONFLICT(tournament_id,user_id) DO NOTHING").bind(t.id, teamId, userId, displayName).run();
         if (!joined.meta.changes) { await this.sendMessage(channelId, "You're already assigned to a team in this tournament."); return; }
-        await this.sendMessage(channelId, "You're on " + team.name + "! Roster: " + (Number(count.count) + 1) + "/" + t-team_size + ".");
+        await this.sendMessage(channelId, "You're on " + team.name + "! Roster: " + (Number(count.count) + 1) + "/" + t.team_size + ".");
         return;
       }
       if (action === "leave") {
-        const membership = await this.env.DB.prepare("SELECT tm.*,te.captain_id,te.name FROM team_members tm JOIN teams te ON te.id=tm-team_id WHERE tm.tournament_id=? AND tm.user_id=?").bind(t.id, userId).first();
+        const membership = await this.env.DB.prepare("SELECT tm.*,te.captain_id,te.name FROM team_members tm JOIN teams te ON te.id=tm.team_id WHERE tm.tournament_id=? AND tm.user_id=?").bind(t.id, userId).first();
         if (!membership) { await this.sendMessage(channelId, "You're not on a team in this tournament."); return; }
         if (membership.captain_id === userId) { await this.sendMessage(channelId, "The captain cannot leave their own team. Use -team disband before registering."); return; }
         await this.env.DB.prepare("DELETE FROM team_members WHERE tournament_id=? AND user_id=?").bind(t.id, userId).run();
@@ -397,9 +397,9 @@ export class DiscordGateway extends DurableObject {
         return;
       }
       if (action === "list") {
-        const result = await this.env.DB.prepare("SELECT te.id,te.name,COUNT(tm.user_id) AS member_count FROM teams te LEFT JOIN team_members tm ON tm-team_id=te.id WHERE te.tournament_id=? GROUP BY te.id ORDER BY te.id").bind(t.id).all();
+        const result = await this.env.DB.prepare("SELECT te.id,te.name,COUNT(tm.user_id) AS member_count FROM teams te LEFT JOIN team_members tm ON tm.team_id=te.id WHERE te.tournament_id=? GROUP BY te.id ORDER BY te.id").bind(t.id).all();
         const rows = result.results || [];
-        await this.sendMessage(channelId, rows.length ? rows.map(x => "#" + x.id + " — " + x.name + " (" + x.member_count + "/" + t-team_size + ")").join("\n") : "No teams have been created yet.");
+        await this.sendMessage(channelId, rows.length ? rows.map(x => "#" + x.id + " — " + x.name + " (" + x.member_count + "/" + t.team_size + ")").join("\n") : "No teams have been created yet.");
         return;
       }
       await this.sendMessage(channelId, "TEAM COMMANDS\n-team create Team Name — Create a team\n-team join TEAM_ID — Join a team\n-team leave — Leave your team\n-team list — Show teams\n-team disband — Disband your team (captain only)");
@@ -412,7 +412,7 @@ export class DiscordGateway extends DurableObject {
   async handleFixture(message) {
     const userId = message.author.id;
     try {
-      const result = await this.env.DB.prepare("SELECT t.id AS tournament_id,t.name AS tournament_name,m.round_number,m.match_number,m.player1_id,m.player2_id,m.winner_id,m.score,m.status,p1.display_name AS p1_name,p2.display_name AS p2_name,pw.display_name AS winner_name FROM tournaments t JOIN matches m ON m.tournament_id=t.id LEFT JOIN participants p1 ON p1.tournament_id=t.id AND p1.user_id=m.player1_id LEFT JOIN participants p2 ON p2.tournament_id=t.id AND p2.user_id=m.player2_id LEFT JOIN participants pw ON pw.tournament_id=t.id AND pw.user_id=m.winner_id WHERE t.guild_id=? AND t.status IN ('ongoing','completed') AND (m.player1_id=? OR m.player2_id=? OR m.player1_id IN (SELECT te.captain_id FROM team_members tm JOIN teams te ON te.id=tm-team_id WHERE tm.tournament_id=t.id AND tm.user_id=?) OR m.player2_id IN (SELECT te.captain_id FROM team_members tm JOIN teams te ON te.id=tm-team_id WHERE tm.tournament_id=t.id AND tm.user_id=?)) ORDER BY t.id DESC,m.round_number,m.match_number LIMIT 20").bind(message.guild_id, userId, userId, userId, userId).all();
+      const result = await this.env.DB.prepare("SELECT t.id AS tournament_id,t.name AS tournament_name,m.round_number,m.match_number,m.player1_id,m.player2_id,m.winner_id,m.score,m.status,p1.display_name AS p1_name,p2.display_name AS p2_name,pw.display_name AS winner_name FROM tournaments t JOIN matches m ON m.tournament_id=t.id LEFT JOIN participants p1 ON p1.tournament_id=t.id AND p1.user_id=m.player1_id LEFT JOIN participants p2 ON p2.tournament_id=t.id AND p2.user_id=m.player2_id LEFT JOIN participants pw ON pw.tournament_id=t.id AND pw.user_id=m.winner_id WHERE t.guild_id=? AND t.status IN ('ongoing','completed') AND (m.player1_id=? OR m.player2_id=? OR m.player1_id IN (SELECT te.captain_id FROM team_members tm JOIN teams te ON te.id=tm.team_id WHERE tm.tournament_id=t.id AND tm.user_id=?) OR m.player2_id IN (SELECT te.captain_id FROM team_members tm JOIN teams te ON te.id=tm.team_id WHERE tm.tournament_id=t.id AND tm.user_id=?)) ORDER BY t.id DESC,m.round_number,m.match_number LIMIT 20").bind(message.guild_id, userId, userId, userId, userId).all();
       const rows = result.results || [];
       if (!rows.length) { await this.sendMessage(message.channel_id, "No fixtures found for you yet. Make sure you're registered and the tournament has started."); return; }
       const lines = rows.map(m => {
